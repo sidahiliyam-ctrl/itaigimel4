@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>המכשף העגול נגד הקוביות - Teachable Machine</title>
+    <!-- טעינת ספריות TensorFlow.js ו-Teachable Machine Pose -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8.6/dist/teachablemachine-pose.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background-color: #121220;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 15px;
+        }
+        h1 {
+            margin-bottom: 10px;
+            color: #4cc9f0;
+            text-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
+        }
+        .setup-panel {
+            background: #1e1e36;
+            padding: 14px 22px;
+            border-radius: 12px;
+            border: 1px solid #3a3a6a;
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            max-width: 980px;
+            width: 100%;
+        }
+        .file-upload-btn {
+            background: #4361ee;
+            color: white;
+            padding: 9px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            display: inline-block;
+            font-size: 14px;
+        }
+        .file-upload-btn:hover {
+            background: #3a0ca3;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .url-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        input[type="text"] {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #4cc9f0;
+            background: #121220;
+            color: white;
+            width: 290px;
+            direction: ltr;
+            font-size: 13px;
+        }
+        button {
+            background: #f72585;
+            color: white;
+            border: none;
+            padding: 9px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s, background 0.2s;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #b5179e;
+        }
+        button:active {
+            transform: scale(0.97);
+        }
+        button.start-cam-btn {
+            background: #06d6a0;
+            color: #072b22;
+        }
+        button.start-cam-btn:hover {
+            background: #04b384;
+        }
+        .main-container {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .game-wrapper {
+            position: relative;
+            border: 3px solid #4cc9f0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 25px rgba(76, 201, 240, 0.3);
+        }
+        canvas#gameCanvas {
+            display: block;
+            background: radial-gradient(circle at center, #1b263b 0%, #0d1b2a 100%);
+        }
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 20px;
+            font-weight: bold;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px #000;
+        }
+        .camera-panel {
+            background: #1e1e36;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid #3a3a6a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 270px;
+        }
+        canvas#webcamCanvas {
+            border-radius: 8px;
+            border: 2px solid #7209b7;
+            background: #000;
+            margin-bottom: 10px;
+        }
+        .predictions {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .pred-row {
+            background: #121220;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 13.5px;
+        }
+        .pred-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            gap: 6px;
+        }
+        .bar-bg {
+            background: #2b2b4b;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            background: #4cc9f0;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        .status-text {
+            font-size: 13.5px;
+            color: #ffd166;
+            text-align: center;
+            width: 100%;
+        }
+        .overlay-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(13, 27, 42, 0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🧙‍♂️ המכשף העגול נגד צבא הקוביות 🟦</h1>
+
+    <!-- פאנל הפעלה וטעינת מודל -->
+    <div class="setup-panel">
+        <button class="start-cam-btn" id="startDefaultBtn" onclick="loadModelFromURL()">▶ הפעל מודל ומצלמה</button>
+
+        <div class="url-group">
+            <input type="text" id="modelUrlInput" value="https://teachablemachine.withgoogle.com/models/AIkbHm6uX/" placeholder="הדבק קישור מ-Teachable Machine">
+            <button onclick="loadModelFromURL()">טען מקישור</button>
+        </div>
+
+        <label class="file-upload-btn">
+            📁 או בחר קבצים מקומיים
+            <input type="file" id="modelFilesInput" multiple accept=".json,.bin">
+        </label>
+
+        <div id="statusMsg" class="status-text">המודל <code>AIkbHm6uX</code> מוגדר מראש. לחץ "הפעל מודל ומצלמה" (או שחק עם החצים ורווח)</div>
+    </div>
+
+    <div class="main-container">
+        <!-- מסך המשחק -->
+        <div class="game-wrapper">
+            <canvas id="gameCanvas" width="640" height="480"></canvas>
+            <div class="hud">
+                <div>ניקוד: <span id="scoreDisplay">0</span></div>
+                <div>חיים: <span id="livesDisplay">❤️❤️❤️</span></div>
+            </div>
+
+            <!-- מסך סיום משחק -->
+            <div id="gameOverScreen" class="overlay-screen hidden">
+                <h2 style="font-size: 36px; color: #f72585; margin-bottom: 10px;">המשחק נגמר!</h2>
+                <p style="font-size: 22px; margin-bottom: 20px;">הניקוד הסופי שלך: <span id="finalScore">0</span></p>
+                <button onclick="resetGame()" style="font-size: 18px; padding: 12px 24px;">שחק שוב 🔄</button>
+            </div>
+        </div>
+
+        <!-- פאנל מצלמה וזיהוי תנועות -->
+        <div class="camera-panel">
+            <h3 style="margin-bottom: 10px; font-size: 16px;">מצלמת זיהוי תנועה</h3>
+            <canvas id="webcamCanvas" width="220" height="220"></canvas>
+            <div class="predictions" id="predictionsContainer">
+                <div class="pred-row">
+                    <div class="pred-header"><span id="label-0">תנועה 1 (ימינה)</span><span id="prob-0">0%</span></div>
+                    <div class="bar-bg"><div class="bar-fill" id="bar-0"></div></div>
+                </div>
+                <div class="pred-row">
+                    <div class="pred-header"><span id="label-1">תנועה 2 (שמאלה)</span><span id="prob-1">0%</span></div>
+                    <div class="bar-bg"><div class="bar-fill" id="bar-1"></div></div>
+                </div>
+                <div class="pred-row">
+                    <div class="pred-header"><span id="label-2">תנועה 3 (כישוף)</span><span id="prob-2">0%</span></div>
+                    <div class="bar-bg"><div class="bar-fill" id="bar-2"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- קישור המודל המוטמע ---
+        const EMBEDDED_MODEL_URL = "https://teachablemachine.withgoogle.com/models/AIkbHm6uX/";
+
+        // --- משתני Teachable Machine ---
+        let model, webcam, ctxWebcam, maxPredictions;
+        let isModelLoaded = false;
+        let isSettingUpWebcam = false;
+        let currentAction = "none"; // "right", "left", "cast", "none"
+        const CONFIDENCE_THRESHOLD = 0.78;
+
+        // --- משתני המשחק ---
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        let score = 0;
+        let lives = 3;
+        let isGameOver = false;
+        let lastCastTime = 0;
+        const CAST_COOLDOWN = 450;
+
+        // דמות המכשף (כדור)
+        const wizard = {
+            x: canvas.width / 2,
+            y: canvas.height - 55,
+            radius: 24,
+            speed: 5.5,
+            moveDir: 0
+        };
+
+        let spells = [];
+        let enemies = [];
+        let particles = [];
+        let enemySpawnTimer = 0;
+
+        // תמיכה במקלדת לבדיקה מהירה
+        const keys = {};
+        window.addEventListener("keydown", e => {
+            keys[e.code] = true;
+            if (e.code === "Space" && !isGameOver) castSpell();
+        });
+        window.addEventListener("keyup", e => keys[e.code] = false);
+
+        // --- טעינת מודל מקבצים מקומיים ---
+        document.getElementById("modelFilesInput").addEventListener("change", async (event) => {
+            const files = Array.from(event.target.files);
+            const modelFile = files.find(f => f.name === "model.json");
+            const weightsFile = files.find(f => f.name === "weights.bin");
+            const metadataFile = files.find(f => f.name === "metadata.json");
+
+            if (!modelFile || !weightsFile || !metadataFile) {
+                alert("נא לבחור יחד את כל שלושת הקבצים: model.json, metadata.json, weights.bin");
+                return;
+            }
+
+            try {
+                document.getElementById("statusMsg").innerText = "טוען מודל מקומי ומפעיל מצלמה...";
+                model = await tmPose.loadFromFiles(modelFile, weightsFile, metadataFile);
+                syncPredictionLabels();
+                await setupWebcam();
+            } catch (err) {
+                console.error(err);
+                document.getElementById("statusMsg").innerText = "שגיאה בטעינת הקבצים המקומיים.";
+            }
+        });
+
+        // --- טעינת מודל מקישור (מוטמע או מוזן) ---
+        async function loadModelFromURL() {
+            if (isSettingUpWebcam) return;
+            let rawUrl = document.getElementById("modelUrlInput").value.trim() || EMBEDDED_MODEL_URL;
+            if (!rawUrl.endsWith("/")) rawUrl += "/";
+
+            try {
+                isSettingUpWebcam = true;
+                document.getElementById("statusMsg").innerText = "טוען מודל AI מ-Teachable Machine...";
+                const modelURL = rawUrl + "model.json";
+                const metadataURL = rawUrl + "metadata.json";
+
+                model = await tmPose.load(modelURL, metadataURL);
+                syncPredictionLabels();
+                await setupWebcam();
+            } catch (err) {
+                console.error(err);
+                document.getElementById("statusMsg").innerText = "שגיאה בטעינת המודל מהרשת. ודא חיבור לאינטרנט והרשאות מצלמה.";
+            } finally {
+                isSettingUpWebcam = false;
+            }
+        }
+
+        // סנכרון שמות הקטגוריות שבמודל לתצוגת האחוזים
+        function syncPredictionLabels() {
+            if (!model) return;
+            const total = model.getTotalClasses();
+            const labels = model.getClassLabels ? model.getClassLabels() : [];
+            const container = document.getElementById("predictionsContainer");
+            container.innerHTML = "";
+
+            for (let i = 0; i < total; i++) {
+                const name = labels[i] || `קטגוריה ${i + 1}`;
+                const row = document.createElement("div");
+                row.className = "pred-row";
+                row.innerHTML = `
+                    <div class="pred-header"><span>${name}</span><span id="prob-${i}">0%</span></div>
+                    <div class="bar-bg"><div class="bar-fill" id="bar-${i}"></div></div>
+                `;
+                container.appendChild(row);
+            }
+        }
+
+        // --- הפעלת מצלמת רשת ---
+        async function setupWebcam() {
+            maxPredictions = model.getTotalClasses();
+            const size = 220;
+            const flip = true;
+
+            if (webcam) {
+                await webcam.stop();
+            }
+
+            webcam = new tmPose.Webcam(size, size, flip);
+            await webcam.setup();
+            await webcam.play();
+
+            const webcamCanvas = document.getElementById("webcamCanvas");
+            ctxWebcam = webcamCanvas.getContext("2d");
+
+            const firstStart = !isModelLoaded;
+            isModelLoaded = true;
+            document.getElementById("statusMsg").innerText = "✅ המודל והמצלמה פעילים! בצע תנועות מול המצלמה.";
+            document.getElementById("startDefaultBtn").innerText = "🔄 הפעל מצלמה מחדש";
+
+            if (firstStart) {
+                window.requestAnimationFrame(poseLoop);
+            }
+        }
+
+        // --- לולאת זיהוי התנוחות ---
+        async function poseLoop() {
+            if (isModelLoaded && webcam) {
+                webcam.update();
+                await predictPose();
+            }
+            window.requestAnimationFrame(poseLoop);
+        }
+
+        async function predictPose() {
+            const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
+            const prediction = await model.predict(posenetOutput);
+
+            let highestProb = 0;
+            let bestLabel = "";
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const prob = prediction[i].probability;
+                const label = prediction[i].className.trim();
+
+                const pct = Math.round(prob * 100);
+                const probEl = document.getElementById(`prob-${i}`);
+                const barEl = document.getElementById(`bar-${i}`);
+                if (probEl && barEl) {
+                    probEl.innerText = pct + "%";
+                    barEl.style.width = pct + "%";
+                    barEl.style.background = prob >= CONFIDENCE_THRESHOLD ? "#06d6a0" : "#4cc9f0";
+                }
+
+                if (prob > highestProb) {
+                    highestProb = prob;
+                    bestLabel = label;
+                }
+            }
+
+            if (highestProb >= CONFIDENCE_THRESHOLD) {
+                const normalized = bestLabel.toLowerCase().replace(/\s+/g, "");
+                if (normalized.includes("ימין") || normalized.includes("right")) {
+                    currentAction = "right";
+                } else if (normalized.includes("שמאל") || normalized.includes("left")) {
+                    currentAction = "left";
+                } else if (normalized.includes("כישוף") || normalized.includes("spell") || normalized.includes("cast") || normalized.includes("shoot")) {
+                    currentAction = "cast";
+                    if (!isGameOver) castSpell();
+                } else {
+                    currentAction = "none";
+                }
+            } else {
+                currentAction = "none";
+            }
+
+            ctxWebcam.drawImage(webcam.canvas, 0, 0);
+            if (pose) {
+                const minPartConfidence = 0.5;
+                tmPose.drawKeypoints(pose.keypoints, minPartConfidence, ctxWebcam);
+                tmPose.drawSkeleton(pose.keypoints, minPartConfidence, ctxWebcam);
+            }
+        }
+
+        // --- לוגיקת המשחק ---
+        function castSpell() {
+            const now = Date.now();
+            if (now - lastCastTime < CAST_COOLDOWN) return;
+            lastCastTime = now;
+
+            const isFire = Math.random() > 0.5;
+            spells.push({
+                x: wizard.x,
+                y: wizard.y - wizard.radius - 10,
+                radius: 12,
+                speed: 8,
+                type: isFire ? "fire" : "ice",
+                color: isFire ? "#ff5400" : "#00f5d4",
+                glow: isFire ? "#ffbd00" : "#4cc9f0"
+            });
+        }
+
+        function spawnEnemy() {
+            const size = 34 + Math.random() * 18;
+            enemies.push({
+                x: Math.random() * (canvas.width - size),
+                y: -size,
+                size: size,
+                speed: 1.5 + Math.random() * 1.5 + (score * 0.015),
+                color: "#e63946",
+                rotation: 0,
+                rotSpeed: (Math.random() - 0.5) * 0.05
+            });
+        }
+
+        function createExplosion(x, y, color) {
+            for (let i = 0; i < 14; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 7,
+                    vy: (Math.random() - 0.5) * 7,
+                    life: 1.0,
+                    color: color
+                });
+            }
+        }
+
+        function updateGame() {
+            if (isGameOver) return;
+
+            wizard.moveDir = 0;
+            if (currentAction === "right" || keys["ArrowRight"]) wizard.moveDir = 1;
+            if (currentAction === "left" || keys["ArrowLeft"]) wizard.moveDir = -1;
+
+            wizard.x += wizard.moveDir * wizard.speed;
+
+            if (wizard.x - wizard.radius < 0) wizard.x = wizard.radius;
+            if (wizard.x + wizard.radius > canvas.width) wizard.x = canvas.width - wizard.radius;
+
+            for (let i = spells.length - 1; i >= 0; i--) {
+                const s = spells[i];
+                s.y -= s.speed;
+                if (Math.random() > 0.4) {
+                    particles.push({
+                        x: s.x + (Math.random() - 0.5) * 8,
+                        y: s.y + 5,
+                        vx: 0,
+                        vy: 1.5,
+                        life: 0.5,
+                        color: s.glow
+                    });
+                }
+                if (s.y + s.radius < 0) {
+                    spells.splice(i, 1);
+                }
+            }
+
+            enemySpawnTimer++;
+            if (enemySpawnTimer > Math.max(35, 95 - score * 0.5)) {
+                spawnEnemy();
+                enemySpawnTimer = 0;
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                e.y += e.speed;
+                e.rotation += e.rotSpeed;
+
+                let enemyDestroyed = false;
+
+                for (let j = spells.length - 1; j >= 0; j--) {
+                    const s = spells[j];
+                    const closestX = Math.max(e.x, Math.min(s.x, e.x + e.size));
+                    const closestY = Math.max(e.y, Math.min(s.y, e.y + e.size));
+                    const distX = s.x - closestX;
+                    const distY = s.y - closestY;
+
+                    if ((distX * distX + distY * distY) < (s.radius * s.radius)) {
+                        createExplosion(e.x + e.size / 2, e.y + e.size / 2, s.color);
+                        spells.splice(j, 1);
+                        enemies.splice(i, 1);
+                        score += 10;
+                        document.getElementById("scoreDisplay").innerText = score;
+                        enemyDestroyed = true;
+                        break;
+                    }
+                }
+
+                if (enemyDestroyed) continue;
+
+                const distWizard = Math.hypot(wizard.x - (e.x + e.size / 2), wizard.y - (e.y + e.size / 2));
+                if (distWizard < wizard.radius + e.size / 2 || e.y > canvas.height) {
+                    createExplosion(e.x + e.size / 2, e.y + e.size / 2, "#e63946");
+                    enemies.splice(i, 1);
+                    lives--;
+                    updateLivesUI();
+                    if (lives <= 0) {
+                        endGame();
+                    }
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.04;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(wizard.x, wizard.y);
+
+            ctx.beginPath();
+            ctx.arc(0, 0, wizard.radius, 0, Math.PI * 2);
+            ctx.fillStyle = "#7209b7";
+            ctx.shadowColor = "#b5179e";
+            ctx.shadowBlur = 15;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#f72585";
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = "#ffbe0b";
+            ctx.beginPath();
+            ctx.arc(-8, -3, 3.5, 0, Math.PI * 2);
+            ctx.arc(8, -3, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#3a0ca3";
+            ctx.beginPath();
+            ctx.moveTo(-26, -16);
+            ctx.lineTo(26, -16);
+            ctx.lineTo(0, -52);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = "#4cc9f0";
+            ctx.stroke();
+
+            ctx.restore();
+
+            spells.forEach(s => {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                ctx.fillStyle = s.color;
+                ctx.shadowColor = s.glow;
+                ctx.shadowBlur = 18;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.radius * 0.5, 0, Math.PI * 2);
+                ctx.fillStyle = "#ffffff";
+                ctx.fill();
+                ctx.restore();
+            });
+
+            enemies.forEach(e => {
+                ctx.save();
+                ctx.translate(e.x + e.size / 2, e.y + e.size / 2);
+                ctx.rotate(e.rotation);
+                ctx.fillStyle = e.color;
+                ctx.fillRect(-e.size / 2, -e.size / 2, e.size, e.size);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#ffccd5";
+                ctx.strokeRect(-e.size / 2, -e.size / 2, e.size, e.size);
+
+                ctx.fillStyle = "#1d3557";
+                ctx.fillRect(-9, -6, 5, 5);
+                ctx.fillRect(4, -6, 5, 5);
+                ctx.fillRect(-7, 5, 14, 4);
+                ctx.restore();
+            });
+
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        function updateLivesUI() {
+            document.getElementById("livesDisplay").innerText = "❤️".repeat(Math.max(0, lives));
+        }
+
+        function endGame() {
+            isGameOver = true;
+            document.getElementById("finalScore").innerText = score;
+            document.getElementById("gameOverScreen").classList.remove("hidden");
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            spells = [];
+            enemies = [];
+            particles = [];
+            wizard.x = canvas.width / 2;
+            isGameOver = false;
+            document.getElementById("scoreDisplay").innerText = "0";
+            updateLivesUI();
+            document.getElementById("gameOverScreen").classList.add("hidden");
+        }
+
+        function gameLoop() {
+            updateGame();
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
